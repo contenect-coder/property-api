@@ -5,6 +5,7 @@ const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
 require("dotenv").config();
+const pointsRouter = require("./points.js");
 
 const app = express();
 app.use(cors());
@@ -622,6 +623,11 @@ app.delete("/favorites", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+app.use("/points", pointsRouter);
+
+app.use("/agents", require("./agents"));
+
 
 // Global Error Handler
 app.use((err, req, res, next) => {
