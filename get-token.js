@@ -1,14 +1,15 @@
+require('dotenv').config();
 const { createClient } = require('@supabase/supabase-js');
 
 const supabase = createClient(
-  'https://xuevxjlxksbcttbdhjjn.supabase.co',
-  'sb_secret_0bbND8yHeNARbf59kyBH_g_eFWXU_lO'
+  process.env.SUPABASE_URL,
+  process.env.property_app_secret_key
 );
 
 async function main() {
   const { data, error } = await supabase.auth.signInWithPassword({
-    email: 'sawmiyakumar8@gmail.com',
-    password: '123456',
+    email: process.env.TEST_USER_EMAIL,
+    password: process.env.TEST_USER_PASSWORD,
   });
 
   if (error) {
