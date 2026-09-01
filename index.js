@@ -624,6 +624,34 @@ app.delete("/favorites", async (req, res) => {
   }
 });
 
+// Newsletter
+app.post("/newsletter/subscribe", async (req, res) => {
+  const { email } = req.body;
+
+  if (!email || !/^\S+@\S+\.\S+$/.test(email)) {
+    return res.status(400).json({ error: "A valid email is required" });
+  }
+
+  try {
+    const result = await pool.query(
+      `INSERT INTO newsletter_subscribers (email)
+       VALUES ($1)
+       ON CONFLICT (email) DO NOTHING
+       RETURNING *`,
+      [email.toLowerCase().trim()]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(200).json({ message: "Already subscribed" });
+    }
+
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error("Error subscribing to newsletter:", err);
+    res.status(500).json({ error: "Failed to subscribe" });
+  }
+});
+
 app.use("/points", pointsRouter);
 
 app.use("/agents", require("./agents"));
