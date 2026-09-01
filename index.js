@@ -7,6 +7,9 @@ const fs = require("fs");
 require("dotenv").config();
 const pointsRouter = require("./points.js");
 
+const { Resend } = require("resend");
+const resend = new Resend(process.env.RESEND_API_KEY);
+
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -632,20 +635,37 @@ app.post("/newsletter/subscribe", async (req, res) => {
     return res.status(400).json({ error: "A valid email is required" });
   }
 
+  const cleanEmail = email.toLowerCase().trim();
+
   try {
     const result = await pool.query(
       `INSERT INTO newsletter_subscribers (email)
        VALUES ($1)
        ON CONFLICT (email) DO NOTHING
        RETURNING *`,
-      [email.toLowerCase().trim()]
+      [cleanEmail]
     );
 
-    if (result.rows.length === 0) {
-      return res.status(200).json({ message: "Already subscribed" });
+    const alreadySubscribed = result.rows.length === 0;
+
+    // Only send a confirmation email for new subscribers
+    if (!alreadySubscribed) {
+      try {
+        await resend.emails.send({
+          from: "onboarding@resend.dev", // swap for your verified domain later
+          to: cleanEmail,
+          subject: "You're subscribed!",
+          html: "<p>Thanks for subscribing to our newsletter. We'll keep you posted on new listings and updates.</p>",
+        });
+      } catch (emailErr) {
+        // Don't fail the whole request if just the email send fails
+        console.error("Error sending confirmation email:", emailErr);
+      }
     }
 
-    res.status(201).json(result.rows[0]);
+    res.status(alreadySubscribed ? 200 : 201).json(
+      alreadySubscribed ? { message: "Already subscribed" } : result.rows[0]
+    );
   } catch (err) {
     console.error("Error subscribing to newsletter:", err);
     res.status(500).json({ error: "Failed to subscribe" });
