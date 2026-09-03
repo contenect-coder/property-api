@@ -7,8 +7,7 @@ const fs = require("fs");
 require("dotenv").config();
 const pointsRouter = require("./points.js");
 
-const { Resend } = require("resend");
-const resend = new Resend(process.env.RESEND_API_KEY);
+const { sendEmail } = require("./mailer.js");
 
 const app = express();
 app.use(cors());
@@ -629,7 +628,7 @@ app.delete("/favorites", async (req, res) => {
 
 // Newsletter
 app.post("/newsletter/subscribe", async (req, res) => {
-  const { email } = req.body;
+  const { email, resendEmail } = req.body;
 
   if (!email || !/^\S+@\S+\.\S+$/.test(email)) {
     return res.status(400).json({ error: "A valid email is required" });
@@ -647,25 +646,57 @@ app.post("/newsletter/subscribe", async (req, res) => {
     );
 
     const alreadySubscribed = result.rows.length === 0;
+    let emailResult = null;
 
-    // Only send a confirmation email for new subscribers
-    if (!alreadySubscribed) {
-      try {
-        await resend.emails.send({
-          from: "onboarding@resend.dev", // swap for your verified domain later
-          to: cleanEmail,
-          subject: "You're subscribed!",
-          html: "<p>Thanks for subscribing to our newsletter. We'll keep you posted on new listings and updates.</p>",
-        });
-      } catch (emailErr) {
-        // Don't fail the whole request if just the email send fails
-        console.error("Error sending confirmation email:", emailErr);
-      }
+    // Send confirmation email for new subscribers or if specifically requested
+    if (!alreadySubscribed || resendEmail === true) {
+      emailResult = await sendEmail({
+        to: cleanEmail,
+        subject: "Welcome to HOME Real Estate — Subscription Confirmed",
+        html: `
+          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 32px 24px; background: #ffffff; border: 1px solid #e7e5e4; border-radius: 16px;">
+            <div style="text-align: center; margin-bottom: 28px;">
+              <h1 style="color: #1c1917; margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -0.5px;">HOME Real Estate</h1>
+              <p style="color: #78716c; font-size: 14px; margin-top: 6px;">Your premier gateway to curated real estate in Sri Lanka</p>
+            </div>
+            
+            <div style="background-color: #fcfbf9; border: 1px solid #f5f5f4; padding: 24px; border-radius: 12px; margin-bottom: 24px;">
+              <h2 style="color: #292524; font-size: 18px; margin-top: 0; font-weight: 600;">You're successfully subscribed! 🎉</h2>
+              <p style="color: #57534e; font-size: 15px; line-height: 1.6; margin: 0 0 12px 0;">
+                Thank you for joining. We have confirmed your subscription for:
+              </p>
+              <div style="background: #ffffff; padding: 10px 16px; border-radius: 8px; border: 1px dashed #d6d3d1; font-family: monospace; font-size: 14px; color: #1c1917; display: inline-block;">
+                ${cleanEmail}
+              </div>
+              <p style="color: #57534e; font-size: 14px; line-height: 1.6; margin: 16px 0 0 0;">
+                You will receive our weekly curated picks across <strong>Buy</strong>, <strong>Rent</strong>, and <strong>Invest</strong> categories, along with neighborhood price insights and verified market updates.
+              </p>
+            </div>
+
+            <div style="text-align: center; margin: 32px 0;">
+              <a href="https://famous-pavlova-ed0138.netlify.app/" style="background: #1c1917; color: #ffffff; text-decoration: none; padding: 12px 28px; border-radius: 9999px; font-weight: 600; font-size: 14px; display: inline-block;">
+                Explore Latest Listings →
+              </a>
+            </div>
+
+            <hr style="border: none; border-top: 1px solid #f5f5f4; margin: 28px 0;" />
+            <p style="color: #a8a29e; font-size: 12px; text-align: center; margin: 0; line-height: 1.5;">
+              © 2026 HOME Real Estate Agency. Colombo, Sri Lanka.<br/>
+              If you didn't request this email, you can ignore it or unsubscribe anytime.
+            </p>
+          </div>
+        `,
+        text: `Welcome to HOME Real Estate!\n\nYour subscription for ${cleanEmail} has been confirmed. You will receive weekly picks for buying, renting, and investing in Sri Lanka.\n\nBrowse properties anytime at: https://famous-pavlova-ed0138.netlify.app/`,
+      });
     }
 
-    res.status(alreadySubscribed ? 200 : 201).json(
-      alreadySubscribed ? { message: "Already subscribed" } : result.rows[0]
-    );
+    res.status(alreadySubscribed ? 200 : 201).json({
+      message: alreadySubscribed ? "Already subscribed" : "Subscribed successfully",
+      subscriber: result.rows[0] || { email: cleanEmail },
+      emailSent: emailResult ? emailResult.success : false,
+      emailProvider: emailResult ? emailResult.provider : null,
+      emailError: emailResult && !emailResult.success ? emailResult.error : null,
+    });
   } catch (err) {
     console.error("Error subscribing to newsletter:", err);
     res.status(500).json({ error: "Failed to subscribe" });
